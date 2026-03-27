@@ -6,6 +6,25 @@ const COMMAND_SUGGESTIONS_URL = "http://127.0.0.1:8000/command-suggestions";
 const UPLOAD_URL = "http://127.0.0.1:8000/upload";
 const INFO_URL = "http://127.0.0.1:8000/info";
 
+// Mode configurations
+const MODES = {
+    default: {
+        name: "Mixed Mode",
+        icon: "✦",
+        systemPrompt: "You are CoolBoi_2007, a Gen-Z AI assistant for gaming and tech support. Talk casually like a knowledgeable friend — use light Gen-Z slang, be direct, helpful, and never boring. Balance gaming and coding topics equally."
+    },
+    gaming: {
+        name: "Gaming Mode",
+        icon: "⚔️",
+        systemPrompt: "You are CoolBoi_2007 in GAMING MODE. You're an elite gamer helping other gamers. Use gaming slang and analogies heavily. Be hype, energetic, and treat every tech problem like a boss fight to defeat."
+    },
+    coding: {
+        name: "Coding Mode",
+        icon: "</>",
+        systemPrompt: "You are CoolBoi_2007 in CODING MODE. You're a senior dev who's also chill and approachable. Focus on code quality, debugging, and dev tools. Use programming references naturally. Be precise but never robotic."
+    }
+};
+
 // DOM Elements
 const messageInput = document.getElementById("message");
 const sendBtn = document.getElementById("sendBtn");
@@ -17,22 +36,38 @@ const commandSuggestionsDiv = document.getElementById("commandSuggestions");
 const uploadBtn = document.getElementById("uploadBtn");
 const fileInput = document.getElementById("fileInput");
 const settingsBtn = document.getElementById("settingsBtn");
-const settingsPanel = document.getElementById("settingsPanel");
-const clearHistoryBtn = document.getElementById("clearHistoryBtn");
-const toggleThemeBtn = document.getElementById("toggleThemeBtn");
+const settingsSidebar = document.getElementById("settingsSidebar");
+const settingsOverlay = document.getElementById("settingsOverlay");
 const closeSettingsBtn = document.getElementById("closeSettingsBtn");
-const systemInfoDiv = document.getElementById("systemInfo");
+const clearHistoryBtn = document.getElementById("clearHistoryBtn");
+const exportMdBtn = document.getElementById("exportMdBtn");
+const exportTxtBtn = document.getElementById("exportTxtBtn");
+const temperatureSlider = document.getElementById("temperatureSlider");
+const temperatureValue = document.getElementById("temperatureValue");
+const themeDarkBtn = document.getElementById("themeDarkBtn");
+const themeLightBtn = document.getElementById("themeLightBtn");
+const modeIndicator = document.getElementById("modeIndicator");
+const currentModeDisplay = document.getElementById("currentModeDisplay");
 const modelInfoDiv = document.getElementById("modelInfo");
+const tempInfoDiv = document.getElementById("tempInfo");
 
 // State management
 let isLoading = false;
-let stopResponse = false; // Flag to stop AI response
-let currentTypingAnimation = null; // Reference to current typing animation
-let conversations = []; // Array of conversation objects
-let currentConversationId = null; // ID of currently active conversation
+let stopResponse = false;
+let currentTypingAnimation = null;
+let conversations = [];
+let currentConversationId = null;
 
-// LocalStorage key
+// LocalStorage keys
 const STORAGE_KEY = "coolboi_conversations";
+const SETTINGS_KEY = "coolboi_settings";
+
+// Default settings
+const defaultSettings = {
+    mode: "default",
+    theme: "dark",
+    temperature: 0.7
+};
 
 // Initialize on page load
 window.addEventListener("load", initializeApp);
@@ -54,31 +89,48 @@ messageInput.addEventListener("keydown", (e) => {
     }
 });
 
-// file upload handlers
+// File upload handlers
 uploadBtn.addEventListener("click", () => fileInput.click());
 fileInput.addEventListener("change", (e) => {
     const file = e.target.files[0];
     if (file) handleFileUpload(file);
 });
 
-// settings handlers
-settingsBtn.addEventListener("click", () => {
-    settingsPanel.classList.add("show");
-    loadSettings();
-});
-closeSettingsBtn.addEventListener("click", () => settingsPanel.classList.remove("show"));
+// Settings sidebar handlers
+settingsBtn.addEventListener("click", openSettings);
+closeSettingsBtn.addEventListener("click", closeSettings);
+settingsOverlay.addEventListener("click", closeSettings);
+
 clearHistoryBtn.addEventListener("click", () => {
-    // Confirm before clearing
-    if (confirm("⚠️ Are you sure you want to clear all conversation history? This cannot be undone.")) {
-        // clear frontend history and backend
+    if (confirm("⚠️ Clear all conversation history? This cannot be undone.")) {
         conversations = [];
         saveConversationsToStorage();
         createNewConversation();
-        showError("✓ Conversation history cleared");
-        settingsPanel.classList.remove("show");
+        showError("✓ History cleared");
+        closeSettings();
     }
 });
-toggleThemeBtn.addEventListener("click", toggleTheme);
+
+exportMdBtn.addEventListener("click", () => exportChat("md"));
+exportTxtBtn.addEventListener("click", () => exportChat("txt"));
+
+temperatureSlider.addEventListener("input", (e) => {
+    const value = parseFloat(e.target.value);
+    temperatureValue.textContent = value.toFixed(1);
+    tempInfoDiv.textContent = value.toFixed(1);
+    saveSettings({ temperature: value });
+});
+
+themeDarkBtn.addEventListener("click", () => setTheme("dark"));
+themeLightBtn.addEventListener("click", () => setTheme("light"));
+
+// Mode switcher
+document.querySelectorAll(".mode-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+        const mode = btn.dataset.mode;
+        setMode(mode);
+    });
+});
 
 messageInput.addEventListener("input", handleInputChange);
 messageInput.addEventListener("keydown", handleKeyDown);
@@ -88,14 +140,87 @@ messageInput.addEventListener("blur", () => {
     }, 200);
 });
 
+// ============ Settings Functions ============
+function loadSettings() {
+    const stored = localStorage.getItem(SETTINGS_KEY);
+    const settings = stored ? { ...defaultSettings, ...JSON.parse(stored) } : defaultSettings;
+    
+    // Apply mode
+    setMode(settings.mode, false);
+    
+    // Apply theme
+    setTheme(settings.theme, false);
+    
+    // Apply temperature
+    temperatureSlider.value = settings.temperature;
+    temperatureValue.textContent = settings.temperature.toFixed(1);
+    tempInfoDiv.textContent = settings.temperature.toFixed(1);
+}
+
+function saveSettings(updates) {
+    const stored = localStorage.getItem(SETTINGS_KEY);
+    const settings = stored ? { ...defaultSettings, ...JSON.parse(stored) } : defaultSettings;
+    const newSettings = { ...settings, ...updates };
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(newSettings));
+}
+
+function setMode(mode, save = true) {
+    if (!MODES[mode]) return;
+    
+    // Update body data attribute
+    document.body.dataset.mode = mode;
+    
+    // Update mode indicator in header
+    modeIndicator.innerHTML = `
+        <span class="mode-icon">${MODES[mode].icon}</span>
+        <span class="mode-text">${mode.toUpperCase()} MODE</span>
+    `;
+    
+    // Update current mode display in settings
+    currentModeDisplay.innerHTML = `
+        <span class="current-mode-icon">${MODES[mode].icon}</span>
+        <span class="current-mode-text">${MODES[mode].name}</span>
+    `;
+    
+    // Update mode buttons
+    document.querySelectorAll(".mode-btn").forEach(btn => {
+        btn.classList.toggle("active", btn.dataset.mode === mode);
+    });
+    
+    // Save to localStorage
+    if (save) {
+        saveSettings({ mode });
+        showError(`${MODES[mode].name} activated`);
+    }
+}
+
+function setTheme(theme, save = true) {
+    document.body.dataset.theme = theme;
+    
+    // Update theme buttons
+    themeDarkBtn.classList.toggle("active", theme === "dark");
+    themeLightBtn.classList.toggle("active", theme === "light");
+    
+    if (save) {
+        saveSettings({ theme });
+        showError(`${theme === "dark" ? "Dark" : "Light"} theme applied`);
+    }
+}
+
+function openSettings() {
+    settingsSidebar.classList.add("show");
+    loadSettings();
+}
+
+function closeSettings() {
+    settingsSidebar.classList.remove("show");
+}
+
 // ============ Command Suggestions ============
 async function handleInputChange() {
     const value = messageInput.value;
-    
-    // Auto-resize textarea
     autoResizeTextarea();
     
-    // Only show suggestions if user typed "/"
     if (value.startsWith("/")) {
         await showCommandSuggestions(value);
     } else {
@@ -104,7 +229,6 @@ async function handleInputChange() {
 }
 
 function handleKeyDown(e) {
-    // Auto-resize on keydown as well for better responsiveness
     setTimeout(autoResizeTextarea, 0);
 }
 
@@ -117,12 +241,8 @@ async function showCommandSuggestions(partial) {
     try {
         const response = await fetch(COMMAND_SUGGESTIONS_URL, {
             method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-                partial: partial
-            })
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ partial })
         });
         
         if (!response.ok) return;
@@ -135,7 +255,6 @@ async function showCommandSuggestions(partial) {
             return;
         }
         
-        // Build suggestions HTML
         let suggestionsHTML = "";
         for (const suggestion of suggestions) {
             suggestionsHTML += `
@@ -165,26 +284,40 @@ async function initializeApp() {
     loadConversationsFromStorage();
     
     if (conversations.length === 0) {
-        // No previous conversations, create a new one
         createNewConversation();
     } else {
-        // Load the most recent conversation
         currentConversationId = conversations[0].id;
         loadConversation(currentConversationId);
     }
     
     renderConversationsList();
+    await loadSystemInfo();
+}
+
+// ============ System Info ============
+async function loadSystemInfo() {
+    try {
+        const resp = await fetch(INFO_URL);
+        if (resp.ok) {
+            const info = await resp.json();
+            modelInfoDiv.textContent = info.model || "qwen2.5-coder:7b";
+        } else {
+            modelInfoDiv.textContent = "Unable to load";
+        }
+    } catch (e) {
+        modelInfoDiv.textContent = "Connection error";
+    }
 }
 
 // ============ Conversation Management ============
 function createNewConversation() {
-    // Clear backend conversation
     fetch(CLEAR_URL, { method: "POST" }).catch(err => console.log("Clear error:", err));
     
     const newConversation = {
         id: Date.now().toString(),
-        title: "New Conversation",
+        title: "New Chat",
         messages: [],
+        mode: getCurrentMode(),
         createdAt: new Date().toISOString()
     };
     
@@ -197,31 +330,31 @@ function createNewConversation() {
     messageInput.focus();
 }
 
+function getCurrentMode() {
+    return document.body.dataset.mode || "default";
+}
+
 function loadConversation(conversationId) {
     const conversation = conversations.find(c => c.id === conversationId);
     
-    if (!conversation) {
-        console.error("Conversation not found");
-        return;
-    }
+    if (!conversation) return;
     
     currentConversationId = conversationId;
-    
-    // Clear display
     clearChatDisplay();
     
-    // Sync conversation with backend
+    // Apply conversation mode if stored
+    if (conversation.mode) {
+        setMode(conversation.mode, false);
+    }
+    
+    // Sync with backend
     fetch(LOAD_CONVERSATION_URL, {
         method: "POST",
-        headers: {
-            "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-            messages: conversation.messages
-        })
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messages: conversation.messages })
     }).catch(err => console.log("Backend sync error:", err));
     
-    // Display all messages from this conversation
+    // Display messages
     for (const message of conversation.messages) {
         const isUser = message.role === "user";
         const messageWrapper = createMessageElement(message.content, isUser);
@@ -251,7 +384,7 @@ function deleteConversation(conversationId) {
 function updateConversationTitle(conversationId, title) {
     const conversation = conversations.find(c => c.id === conversationId);
     if (conversation) {
-        conversation.title = title;
+        conversation.title = title.substring(0, 40);
         saveConversationsToStorage();
         renderConversationsList();
     }
@@ -262,10 +395,8 @@ function addMessageToCurrentConversation(role, content) {
     if (conversation) {
         conversation.messages.push({ role, content });
         
-        // Update title if this is the first user message
-        if (conversation.title === "New Conversation" && role === "user") {
-            const titlePreview = content.substring(0, 40);
-            updateConversationTitle(currentConversationId, titlePreview);
+        if (conversation.title === "New Chat" && role === "user") {
+            updateConversationTitle(currentConversationId, content);
         }
         
         saveConversationsToStorage();
@@ -286,7 +417,6 @@ function loadConversationsFromStorage() {
             conversations = [];
         }
     } catch (error) {
-        console.warn("Failed to parse local conversation storage. Resetting.", error);
         conversations = [];
         localStorage.removeItem(STORAGE_KEY);
     }
@@ -294,6 +424,56 @@ function loadConversationsFromStorage() {
 
 function saveConversationsToStorage() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(conversations));
+}
+
+// ============ Export Chat ============
+function exportChat(format) {
+    const conversation = conversations.find(c => c.id === currentConversationId);
+    if (!conversation || conversation.messages.length === 0) {
+        showError("No messages to export");
+        return;
+    }
+    
+    let content = "";
+    let filename = "";
+    const timestamp = new Date().toISOString().split('T')[0];
+    const mode = getCurrentMode();
+    
+    if (format === "md") {
+        filename = `coolboi_${mode}_${timestamp}.md`;
+        content = `# CoolBoi_2007 Chat Export\n\n`;
+        content += `**Mode:** ${MODES[mode]?.name || "Mixed Mode"}\n`;
+        content += `**Date:** ${new Date().toLocaleString()}\n\n---\n\n`;
+        
+        for (const msg of conversation.messages) {
+            const role = msg.role === "user" ? "**You**" : "**CoolBoi**";
+            content += `## ${role}\n\n${msg.content}\n\n---\n\n`;
+        }
+    } else {
+        filename = `coolboi_${mode}_${timestamp}.txt`;
+        content = `CoolBoi_2007 Chat Export\n`;
+        content += `Mode: ${MODES[mode]?.name || "Mixed Mode"}\n`;
+        content += `Date: ${new Date().toLocaleString()}\n`;
+        content += `${"=".repeat(50)}\n\n`;
+        
+        for (const msg of conversation.messages) {
+            const role = msg.role === "user" ? "You" : "CoolBoi";
+            content += `[${role}]\n${msg.content}\n\n${"-".repeat(30)}\n\n`;
+        }
+    }
+    
+    const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    
+    showError(`✓ Exported as ${filename}`);
+    closeSettings();
 }
 
 // ============ UI Rendering ============
@@ -319,7 +499,6 @@ function renderConversationsList() {
         
         item.appendChild(titleDiv);
         item.appendChild(deleteBtn);
-        
         item.addEventListener("click", () => loadConversation(conversation.id));
         
         conversationsList.appendChild(item);
@@ -359,44 +538,38 @@ function showError(message) {
     errorDiv.classList.add("show");
     setTimeout(() => {
         errorDiv.classList.remove("show");
-    }, 5000);
+    }, 3000);
 }
 
 // ============ File Upload Support ============
 async function handleFileUpload(file) {
-    // Validate file size (10MB max)
-    const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+    const MAX_FILE_SIZE = 10 * 1024 * 1024;
     if (file.size > MAX_FILE_SIZE) {
-        showError(`File too large. Maximum size is 10MB. Your file is ${(file.size / (1024 * 1024)).toFixed(2)}MB.`);
+        showError(`File too large. Max 10MB.`);
         fileInput.value = '';
         return;
     }
 
-    // Validate file type - only allow text-based files
     const supportedExtensions = [
         'txt', 'log', 'json', 'xml', 'yaml', 'yml', 'csv',
         'py', 'js', 'ts', 'jsx', 'tsx', 'java', 'cpp', 'c', 'go', 'rs', 'rb', 'php',
-        'html', 'css', 'sql', 'sh', 'bash', 'conf', 'config', 'ini', 'env',
-        'md', 'txt', 'error', 'trace', 'stacktrace'
+        'html', 'css', 'sql', 'sh', 'bash', 'conf', 'config', 'ini', 'env', 'md'
     ];
     const fileExtension = file.name.split('.').pop().toLowerCase();
     if (!supportedExtensions.includes(fileExtension)) {
-        showError(`Unsupported file type: .${fileExtension}. Supported: text files, code, logs, config files`);
+        showError(`Unsupported file type: .${fileExtension}`);
         fileInput.value = '';
         return;
     }
 
-    // Show user message indicating file upload
-    const fileInfo = `📎 Analyzing ${file.name} (${(file.size / 1024).toFixed(1)}KB)...`;
+    const fileInfo = `📎 Analyzing ${file.name}...`;
     const userMsg = createMessageElement(fileInfo, true);
     chatContainer.appendChild(userMsg);
     scrollToBottom();
 
-    // Add the user message to conversation
     addMessageToCurrentConversation('user', fileInfo);
 
-    // Show loading message
-    const loadingMsg = createMessageElement('🤔 Processing your file...', false);
+    const loadingMsg = createMessageElement('Processing file...', false);
     loadingMsg.style.opacity = '0.7';
     chatContainer.appendChild(loadingMsg);
     scrollToBottom();
@@ -410,156 +583,78 @@ async function handleFileUpload(file) {
             body: formData
         });
 
-        if (!response.ok) {
-            throw new Error(`Server error: ${response.status} ${response.statusText}`);
-        }
+        if (!response.ok) throw new Error(`Server error: ${response.status}`);
 
         const data = await response.json();
-
-        // Remove loading message
         loadingMsg.remove();
 
         if (data.error) {
             showError(`Analysis failed: ${data.error}`);
-            // Add error message to assistant for context
-            addMessageToCurrentConversation('assistant', `Error: ${data.error}`);
         } else {
-            // Display the AI's analysis as a bot message
             const botMsg = createMessageElement('', false);
             chatContainer.appendChild(botMsg);
-            await typeMessage(botMsg, data.response || 'No response received', 25);
+            await typeMessage(botMsg, data.response || 'No response', 25);
             scrollToBottom();
-
-            // Add to conversation history
             addMessageToCurrentConversation('assistant', data.response);
         }
     } catch (err) {
         loadingMsg.remove();
         showError(`Upload failed: ${err.message}`);
     } finally {
-        fileInput.value = ''; // reset file input
+        fileInput.value = '';
     }
 }
 
-// ============ Settings Helpers ============
-function toggleTheme() {
-    const isLight = document.body.classList.toggle('light-mode');
-    localStorage.setItem('theme', isLight ? 'light' : 'dark');
-    
-    // Update button text to show next action
-    const themeLabel = toggleThemeBtn.querySelector('span');
-    if (themeLabel) {
-        themeLabel.textContent = isLight ? '☀️ Switch to Dark Mode' : '🌙 Switch to Light Mode';
-    }
-    
-    // Show feedback
-    showError(isLight ? '✓ Switched to Light Mode' : '✓ Switched to Dark Mode');
-}
-
-async function loadSettings() {
-    // restore theme
-    const theme = localStorage.getItem('theme');
-    if (theme === 'light') document.body.classList.add('light-mode');
-
-    // fetch system/model info
-    try {
-        const resp = await fetch(INFO_URL);
-        if (resp.ok) {
-            const info = await resp.json();
-            
-            // Format system prompt - show first 150 chars and truncate if needed
-            const promptPreview = info.system_prompt 
-                ? (info.system_prompt.length > 150 
-                    ? info.system_prompt.substring(0, 150) + '...' 
-                    : info.system_prompt)
-                : 'Default system prompt';
-            systemInfoDiv.textContent = promptPreview;
-            
-            // Format model info and strip noisy suffixes like "84% left" if any source adds them.
-            const modelName = normalizeModelName(info.model || 'qwen2.5-coder:7b');
-            modelInfoDiv.textContent = modelName;
-        } else {
-            systemInfoDiv.textContent = 'Unable to load system prompt';
-            modelInfoDiv.textContent = 'Unable to load model info';
-        }
-    } catch (e) {
-        console.error('Failed to load info:', e);
-        systemInfoDiv.textContent = 'Error loading system prompt';
-        modelInfoDiv.textContent = 'Error loading model info';
-    }
-}
-
-
+// ============ Scroll Functions ============
 function scrollToBottom() {
-    // Only auto-scroll if user is near the bottom (within 100px)
     const isNearBottom = chatContainer.scrollHeight - chatContainer.scrollTop - chatContainer.clientHeight < 100;
-    
     if (isNearBottom) {
-        chatContainer.scrollTo({
-            top: chatContainer.scrollHeight,
-            behavior: 'smooth'
-        });
+        chatContainer.scrollTo({ top: chatContainer.scrollHeight, behavior: 'smooth' });
     }
 }
 
 function scrollToBottomImmediate() {
-    // Force scroll to bottom (for new conversations, etc.)
-    chatContainer.scrollTo({
-        top: chatContainer.scrollHeight,
-        behavior: 'smooth'
-    });
+    chatContainer.scrollTo({ top: chatContainer.scrollHeight, behavior: 'smooth' });
 }
 
 async function typeMessage(messageWrapper, text, speed = 30) {
-    // Display text with typing animation effect
     const messageBubble = messageWrapper.querySelector(".message");
     messageBubble.textContent = "";
-    currentTypingAnimation = true; // Mark animation as active
+    currentTypingAnimation = true;
 
     for (let i = 0; i < text.length; i++) {
         if (stopResponse) {
-            // Stop animation and show partial text
             messageBubble.textContent = text.substring(0, i);
             currentTypingAnimation = null;
             return;
         }
         messageBubble.textContent += text[i];
-        // Scroll smoothly during typing animation
         scrollToBottom();
         await new Promise(resolve => setTimeout(resolve, speed));
     }
 
-    currentTypingAnimation = null; // Animation completed
+    currentTypingAnimation = null;
 }
 
 // ============ Main Chat Function ============
 async function sendMessage() {
-    // If currently loading, this is a stop request
     if (isLoading) {
         stopResponse = true;
         sendBtn.disabled = true;
-        sendBtn.textContent = "Stopping...";
-        
-        // Remove loading indicator
+        sendBtn.innerHTML = '<span>Stop</span><span class="icon">■</span>';
         const loadingMsg = chatContainer.querySelector(".loading");
         if (loadingMsg) loadingMsg.parentElement.remove();
-        
         return;
     }
 
     const message = messageInput.value.trim();
-
-    // Prevent sending empty messages or messages with only whitespace/newlines
-    if (!message || message.length === 0) {
+    if (!message) {
         messageInput.value = "";
         autoResizeTextarea();
         return;
     }
-    
-    if (isLoading) return;
 
     try {
-        // Add user message to chat display
         const userMsg = createMessageElement(message, true);
         chatContainer.appendChild(userMsg);
         messageInput.value = "";
@@ -567,16 +662,12 @@ async function sendMessage() {
         messageInput.focus();
         scrollToBottom();
 
-        // Add to current conversation
         addMessageToCurrentConversation("user", message);
 
-        // Set loading state
         isLoading = true;
-        stopResponse = false; // Reset stop flag
-        sendBtn.disabled = false; // Keep button enabled for stop functionality
-        sendBtn.textContent = "Stop"; // Change button to Stop
+        stopResponse = false;
+        sendBtn.innerHTML = '<span>Stop</span><span class="icon">■</span>';
 
-        // Show loading indicator
         const loadingWrapper = document.createElement("div");
         loadingWrapper.className = "message-wrapper bot-wrapper";
         
@@ -593,43 +684,28 @@ async function sendMessage() {
         chatContainer.appendChild(loadingWrapper);
         scrollToBottom();
 
-        // Send request to backend
         const response = await fetch(API_URL, {
             method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-                message: message,
-            }),
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ message })
         });
 
-        if (!response.ok) {
-            throw new Error(`Server error: ${response.statusText}`);
-        }
-
-        // Check if user stopped the response
         if (stopResponse) {
-            // Remove loading message and reset state
             loadingWrapper.remove();
             return;
         }
 
-        // Remove loading message
         loadingWrapper.remove();
 
-        // Check response type - SSE for AI messages, JSON for commands
         const contentType = response.headers.get("content-type");
         
         if (contentType && contentType.includes("text/event-stream")) {
-            // Streaming AI response using Server-Sent Events
             let finalResponse = "";
             
             await new Promise((resolve, reject) => {
                 const botMsg = createMessageElement("", false);
                 chatContainer.appendChild(botMsg);
                 
-                // Create EventSource-like handling for fetch response
                 const reader = response.body.getReader();
                 const decoder = new TextDecoder();
                 let buffer = "";
@@ -638,31 +714,23 @@ async function sendMessage() {
                     try {
                         while (true) {
                             const { done, value } = await reader.read();
-                            
                             if (done || stopResponse) break;
                             
                             buffer += decoder.decode(value, { stream: true });
-                            
-                            // Process complete SSE messages
                             const lines = buffer.split('\n');
-                            buffer = lines.pop(); // Keep incomplete line in buffer
+                            buffer = lines.pop();
                             
                             for (const line of lines) {
                                 if (line.startsWith('data: ')) {
-                                    const data = line.slice(6); // Remove 'data: ' prefix
+                                    const data = line.slice(6);
                                     if (data === '[DONE]') {
-                                        // End of stream
                                         reader.releaseLock();
                                         resolve(finalResponse);
                                         return;
                                     }
                                     finalResponse += data;
-                                    
-                                    // Update message content progressively
                                     const messageBubble = botMsg.querySelector(".message");
                                     messageBubble.textContent = finalResponse;
-                                    
-                                    // Scroll smoothly during streaming
                                     scrollToBottom();
                                 }
                             }
@@ -670,7 +738,6 @@ async function sendMessage() {
                         
                         reader.releaseLock();
                         resolve(finalResponse);
-                        
                     } catch (error) {
                         reader.releaseLock();
                         reject(error);
@@ -680,62 +747,37 @@ async function sendMessage() {
                 processStream();
             });
             
-            // Add to conversation (only if not stopped)
-            if (!stopResponse && finalResponse.trim()) {
-                addMessageToCurrentConversation("assistant", finalResponse);
-            } else if (stopResponse && finalResponse.trim()) {
+            if (finalResponse.trim()) {
                 addMessageToCurrentConversation("assistant", finalResponse);
             }
             
         } else {
-            // JSON response (command)
             const data = await response.json();
-            
-            // Add bot response with typing animation
             const botMsg = createMessageElement("", false);
             chatContainer.appendChild(botMsg);
-            await typeMessage(botMsg, data.response || "No response received", 25);
+            await typeMessage(botMsg, data.response || "No response", 25);
             scrollToBottom();
 
-            // Add to conversation (only if not stopped)
             if (!stopResponse) {
                 addMessageToCurrentConversation("assistant", data.response);
-            } else {
-                // Add partial response if stopped
-                const partialText = botMsg.querySelector(".message").textContent;
-                if (partialText.trim()) {
-                    addMessageToCurrentConversation("assistant", partialText);
-                }
             }
         }
 
-        // Clear error if any
         errorDiv.classList.remove("show");
     } catch (error) {
         console.error("Error:", error);
         
-        // Don't show error if response was stopped by user
         if (!stopResponse) {
-            showError(`Failed to get response: ${error.message}`);
+            showError(`Failed: ${error.message}`);
         }
         
-        // Remove loading message if it exists
         const loadingMsg = chatContainer.querySelector(".loading");
         if (loadingMsg) loadingMsg.parentElement.remove();
     } finally {
         isLoading = false;
         stopResponse = false;
         sendBtn.disabled = false;
-        sendBtn.textContent = "Send";
+        sendBtn.innerHTML = '<span>Send</span><span class="icon">→</span>';
         messageInput.focus();
     }
-}
-
-function normalizeModelName(rawModelName) {
-    if (!rawModelName || typeof rawModelName !== "string") {
-        return "qwen2.5-coder:7b";
-    }
-
-    // Remove optional status tails such as "84% left".
-    return rawModelName.replace(/\s*\(?\d{1,3}%\s+left\)?/gi, "").trim();
 }
