@@ -1,1 +1,7 @@
 .aider*
+__pycache__/
+*.pyc
+venv/
+.python312/
+conversation_history.json
+*.log

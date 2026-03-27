@@ -1,0 +1,99 @@
+You are helping me improve my AI assistant project called **CoolBoi_2007 v4**.
+
+The backend is written in **Python** and the assistant currently has files such as:
+
+* main.py
+* ai_service.py
+* commands.py
+* conversation_history.json
+
+I want you to implement an improved **Personality & Mode System** for the assistant.
+
+The assistant should have **different modes that change both behavior AND UI theme color**.
+
+Important requirements:
+
+1. Create a system where the AI can switch between **modes**.
+2. Each mode must change:
+
+   * the AI personality (system prompt)
+   * the **primary UI color theme**
+3. The UI already supports **dark mode and light mode**.
+
+Current default colors:
+
+* Dark mode → blue + black
+* Light mode → blue + white
+
+When switching modes, the **primary color should change** (for example red, purple, green, etc.) while still respecting dark/light mode.
+
+Example behavior:
+
+* If user switches to coder mode → primary color becomes purple
+* If user switches to gaming mode → primary color becomes red
+* Assistant mode keeps the default blue theme.
+
+The system must support these modes:
+
+1. assistant (default)
+
+   * Friendly helpful AI assistant
+   * Slight Gen-Z tone but still professional
+   * UI color: blue
+
+2. coder
+
+   * Focused on programming and debugging
+   * Gives clean code examples and explanations
+   * Slight Gen-Z tone but technical
+   * UI color: purple
+
+3. gaming
+
+   * Casual gamer personality
+   * Helps with gaming strategies and performance
+   * More energetic Gen-Z style
+   * UI color: red
+
+Important notes:
+* Instead, **all personalities should naturally include a mild Gen-Z tone** (casual but not cringe).
+
+Implementation details:
+
+1. Create a configuration file called **personalities.json**.
+
+Each personality must include:
+
+* name
+* description
+* system_prompt
+* primary_color
+
+Example structure:
+
+{
+"assistant": {
+"description": "Default CoolBoi assistant personality",
+"primary_color": "blue",
+"system_prompt": "You are CoolBoi..."
+}
+}
+
+2. Implement commands:
+
+/mode assistant
+/mode coder
+/mode gaming
+
+3. When the mode changes:
+
+* update the active system prompt
+* update the UI primary color dynamically
+
+4. The assistant should remember the **current mode during the session**.
+
+5. If no mode is selected, default to **assistant mode**.
+
+6. The system should be modular so new personalities can easily be added later.
+
+Generate all necessary code changes and clearly explain which files need to be created or modified.
