@@ -72,7 +72,8 @@ def chat(request: ChatRequest):
 
 @app.post("/load-conversation")
 def load_conversation(request: LoadConversationRequest):
-    conversation_manager.load_conversation(request.messages)
+    messages_dict = [{"role": m.role, "content": m.content} for m in request.messages]
+    conversation_manager.load_conversation(messages_dict)
     return {"message": "Conversation loaded"}
 
 
@@ -108,7 +109,8 @@ async def upload_file(file: UploadFile = File(...)):
         'html', 'css', 'sql', 'sh', 'bash', 'conf', 'config', 'ini', 'env', 'md'
     ]
     
-    file_extension = file.filename.split('.')[-1].lower() if '.' in file.filename else ''
+    filename = file.filename or "unknown.txt"
+    file_extension = filename.split('.')[-1].lower() if '.' in filename else ''
     if not file_extension or file_extension not in supported_extensions:
         return {"error": f"Unsupported file type: .{file_extension}"}
     
@@ -122,7 +124,7 @@ async def upload_file(file: UploadFile = File(...)):
     if not text.strip():
         return {"error": "File is empty or contains no readable text."}
     
-    response = conversation_manager.process_file(text, file.filename)
+    response = conversation_manager.process_file(text, filename)
     return {"response": response}
 
 

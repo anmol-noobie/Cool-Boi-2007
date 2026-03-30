@@ -155,11 +155,10 @@ class ConversationManager:
                 model=MODEL_NAME,
                 messages=messages
             )
-            bot_response = response.choices[0].message.content
+            bot_response = response.choices[0].message.content or "No response generated"
         except Exception as e:
             bot_response = f"File analysis unavailable due to Groq API error: {e}"
 
-        # Add model response to history
         self.add_message("assistant", bot_response)
         return bot_response
 
