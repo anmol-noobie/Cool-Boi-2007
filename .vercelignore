@@ -1,0 +1,13 @@
+backend/
+venv/
+.python312/
+node_modules/
+.git/
+.env
+*.env
+*.pyc
+__pycache__/
+vercel.json
+requirements.txt
+README.md
+.gitignore
