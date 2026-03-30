@@ -1,23 +1,32 @@
-import ollama
+from groq import Groq
 import json
 import os
 import tempfile
 from typing import List, Dict
 from datetime import datetime
+from dotenv import load_dotenv
 
-# Project-relative paths
+load_dotenv()
+
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+MODEL_NAME = os.getenv("MODEL_NAME", "llama-3.3-70b-versatile")
+
+if not GROQ_API_KEY:
+    raise ValueError("GROQ_API_KEY environment variable is not set")
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 HISTORY_FILE = os.path.join(BASE_DIR, "conversation_history.json")
-SYSTEM_PROMPT_FILE = os.path.join(BASE_DIR, "..", "prompts", "system_prompt.txt")
+SYSTEM_PROMPT_FILE = os.path.join(BASE_DIR, "system_prompt.txt")
 
 
 class ConversationManager:
-    """Manages conversation history and sends it to Ollama model"""
+    """Manages conversation history and sends it to Groq cloud model"""
 
     def __init__(self):
         self.conversation_history: List[Dict[str, str]] = []
         self.system_prompt = self.load_system_prompt()
         self.load_history()
+        self.client = Groq(api_key=GROQ_API_KEY)
 
     def load_system_prompt(self) -> str:
         """Load system prompt from file"""
@@ -86,19 +95,15 @@ class ConversationManager:
         # Get full conversation for model
         messages = self.get_messages_for_model()
         
-        # Call Ollama with streaming enabled
+        # Call Groq with streaming enabled
         try:
-            stream = ollama.chat(
-                model="qwen2.5-coder:7b",
+            stream = self.client.chat.completions.create(
+                model=MODEL_NAME,
                 messages=messages,
                 stream=True
             )
         except Exception as e:
-            error_msg = (
-                "Ollama connection failed. Start Ollama and ensure model "
-                "'qwen2.5-coder:7b' is available. "
-                f"Details: {e}"
-            )
+            error_msg = f"Groq API error: {e}"
             yield f"data: {error_msg}\n\n"
             yield "data: [DONE]\n\n"
             self.add_message("assistant", error_msg)
@@ -108,11 +113,10 @@ class ConversationManager:
         
         # Stream the response chunks as Server-Sent Events
         for chunk in stream:
-            if 'message' in chunk and 'content' in chunk['message']:
-                content = chunk['message']['content']
-                if content:  # Only yield non-empty content
+            if chunk.choices and chunk.choices[0].delta.content:
+                content = chunk.choices[0].delta.content
+                if content:
                     bot_response += content
-                    # Format as Server-Sent Event
                     yield f"data: {content}\n\n"
         
         # Send end marker
@@ -147,17 +151,13 @@ class ConversationManager:
         # Prepare messages and send to model
         messages = self.get_messages_for_model()
         try:
-            response = ollama.chat(
-                model="qwen2.5-coder:7b",
+            response = self.client.chat.completions.create(
+                model=MODEL_NAME,
                 messages=messages
             )
-            bot_response = response['message']['content']
+            bot_response = response.choices[0].message.content
         except Exception as e:
-            bot_response = (
-                "File analysis unavailable because Ollama is not reachable "
-                "or the model is missing. "
-                f"Details: {e}"
-            )
+            bot_response = f"File analysis unavailable due to Groq API error: {e}"
 
         # Add model response to history
         self.add_message("assistant", bot_response)

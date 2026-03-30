@@ -3,5 +3,8 @@ __pycache__/
 *.pyc
 venv/
 .python312/
+.env
+*.env
 conversation_history.json
+backend/conversation_history.json
 *.log

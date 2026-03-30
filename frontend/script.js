@@ -1,10 +1,14 @@
-const API_URL = "http://127.0.0.1:8000/chat";
-const HISTORY_URL = "http://127.0.0.1:8000/history";
-const CLEAR_URL = "http://127.0.0.1:8000/clear";
-const LOAD_CONVERSATION_URL = "http://127.0.0.1:8000/load-conversation";
-const COMMAND_SUGGESTIONS_URL = "http://127.0.0.1:8000/command-suggestions";
-const UPLOAD_URL = "http://127.0.0.1:8000/upload";
-const INFO_URL = "http://127.0.0.1:8000/info";
+const CONFIG = {
+    BACKEND_URL: "https://coolboi2007.onrender.com"
+};
+
+const API_URL = `${CONFIG.BACKEND_URL}/chat`;
+const HISTORY_URL = `${CONFIG.BACKEND_URL}/history`;
+const CLEAR_URL = `${CONFIG.BACKEND_URL}/clear`;
+const LOAD_CONVERSATION_URL = `${CONFIG.BACKEND_URL}/load-conversation`;
+const COMMAND_SUGGESTIONS_URL = `${CONFIG.BACKEND_URL}/command-suggestions`;
+const UPLOAD_URL = `${CONFIG.BACKEND_URL}/upload`;
+const INFO_URL = `${CONFIG.BACKEND_URL}/info`;
 
 // Mode configurations
 const MODES = {
@@ -72,8 +76,17 @@ const defaultSettings = {
 // Initialize on page load
 window.addEventListener("load", initializeApp);
 
+// Prevent focus loss during mode switch
+messageInput.addEventListener("blur", (e) => {
+    if (messageInput.dataset.preventBlur) {
+        setTimeout(() => messageInput.focus(), 10);
+    }
+});
+
 // Event listeners
-newChatBtn.addEventListener("click", createNewConversation);
+newChatBtn.addEventListener("click", () => {
+    createNewConversation();
+});
 sendBtn.addEventListener("click", () => {
     if (!isLoading) {
         sendMessage();
@@ -128,7 +141,12 @@ themeLightBtn.addEventListener("click", () => setTheme("light"));
 document.querySelectorAll(".mode-btn").forEach(btn => {
     btn.addEventListener("click", () => {
         const mode = btn.dataset.mode;
+        messageInput.dataset.preventBlur = "true";
         setMode(mode);
+        setTimeout(() => {
+            messageInput.focus();
+            messageInput.dataset.preventBlur = "";
+        }, 100);
     });
 });
 
@@ -167,8 +185,15 @@ function saveSettings(updates) {
 function setMode(mode, save = true) {
     if (!MODES[mode]) return;
     
-    // Update body data attribute
+    const currentMode = document.body.dataset.mode;
+    
+    // Update body data attribute FIRST
     document.body.dataset.mode = mode;
+    
+    // Only create new chat if mode actually changed
+    if (save && currentMode !== mode) {
+        createNewConversation();
+    }
     
     // Update mode indicator in header
     modeIndicator.innerHTML = `
@@ -190,7 +215,9 @@ function setMode(mode, save = true) {
     // Save to localStorage
     if (save) {
         saveSettings({ mode });
-        showError(`${MODES[mode].name} activated`);
+        if (currentMode !== mode) {
+            showError(`${MODES[mode].name} activated - new chat started`);
+        }
     }
 }
 
@@ -210,6 +237,7 @@ function setTheme(theme, save = true) {
 function openSettings() {
     settingsSidebar.classList.add("show");
     loadSettings();
+    loadSystemInfo();
 }
 
 function closeSettings() {
@@ -311,13 +339,17 @@ async function loadSystemInfo() {
 
 // ============ Conversation Management ============
 function createNewConversation() {
+    // Clear backend conversation
     fetch(CLEAR_URL, { method: "POST" }).catch(err => console.log("Clear error:", err));
+    
+    // Get current mode from body.dataset.mode (which is already updated)
+    const currentMode = document.body.dataset.mode || "default";
     
     const newConversation = {
         id: Date.now().toString(),
         title: "New Chat",
         messages: [],
-        mode: getCurrentMode(),
+        mode: currentMode,
         createdAt: new Date().toISOString()
     };
     
@@ -325,9 +357,15 @@ function createNewConversation() {
     currentConversationId = newConversation.id;
     
     saveConversationsToStorage();
-    renderConversationsList();
     clearChatDisplay();
-    messageInput.focus();
+    renderConversationsList();
+    
+    // Focus on input after DOM is ready
+    messageInput.dataset.preventBlur = "true";
+    setTimeout(() => {
+        messageInput.focus();
+        messageInput.dataset.preventBlur = "";
+    }, 100);
 }
 
 function getCurrentMode() {
@@ -482,7 +520,13 @@ function renderConversationsList() {
     
     for (const conversation of conversations) {
         const item = document.createElement("div");
-        item.className = `conversation-item ${conversation.id === currentConversationId ? "active" : ""}`;
+        const conversationMode = conversation.mode || "default";
+        item.className = `conversation-item mode-${conversationMode} ${conversation.id === currentConversationId ? "active" : ""}`;
+        
+        const modeIcon = document.createElement("span");
+        modeIcon.className = "conversation-mode-icon";
+        modeIcon.textContent = MODES[conversationMode]?.icon || "✦";
+        modeIcon.title = `${MODES[conversationMode]?.name || "Mixed"} mode`;
         
         const titleDiv = document.createElement("span");
         titleDiv.className = "conversation-title";
@@ -497,6 +541,7 @@ function renderConversationsList() {
             deleteConversation(conversation.id);
         });
         
+        item.appendChild(modeIcon);
         item.appendChild(titleDiv);
         item.appendChild(deleteBtn);
         item.addEventListener("click", () => loadConversation(conversation.id));
@@ -565,14 +610,14 @@ async function handleFileUpload(file) {
     const fileInfo = `📎 Analyzing ${file.name}...`;
     const userMsg = createMessageElement(fileInfo, true);
     chatContainer.appendChild(userMsg);
-    scrollToBottom();
+    scrollToBottomImmediate();
 
     addMessageToCurrentConversation('user', fileInfo);
 
     const loadingMsg = createMessageElement('Processing file...', false);
     loadingMsg.style.opacity = '0.7';
     chatContainer.appendChild(loadingMsg);
-    scrollToBottom();
+    scrollToBottomImmediate();
 
     const formData = new FormData();
     formData.append('file', file);
@@ -594,7 +639,7 @@ async function handleFileUpload(file) {
             const botMsg = createMessageElement('', false);
             chatContainer.appendChild(botMsg);
             await typeMessage(botMsg, data.response || 'No response', 25);
-            scrollToBottom();
+            scrollToBottomImmediate();
             addMessageToCurrentConversation('assistant', data.response);
         }
     } catch (err) {
@@ -629,7 +674,7 @@ async function typeMessage(messageWrapper, text, speed = 30) {
             return;
         }
         messageBubble.textContent += text[i];
-        scrollToBottom();
+        scrollToBottomImmediate();
         await new Promise(resolve => setTimeout(resolve, speed));
     }
 
@@ -660,7 +705,7 @@ async function sendMessage() {
         messageInput.value = "";
         autoResizeTextarea();
         messageInput.focus();
-        scrollToBottom();
+        scrollToBottomImmediate();
 
         addMessageToCurrentConversation("user", message);
 
@@ -731,7 +776,7 @@ async function sendMessage() {
                                     finalResponse += data;
                                     const messageBubble = botMsg.querySelector(".message");
                                     messageBubble.textContent = finalResponse;
-                                    scrollToBottom();
+                                    scrollToBottomImmediate();
                                 }
                             }
                         }
@@ -756,7 +801,7 @@ async function sendMessage() {
             const botMsg = createMessageElement("", false);
             chatContainer.appendChild(botMsg);
             await typeMessage(botMsg, data.response || "No response", 25);
-            scrollToBottom();
+            scrollToBottomImmediate();
 
             if (!stopResponse) {
                 addMessageToCurrentConversation("assistant", data.response);

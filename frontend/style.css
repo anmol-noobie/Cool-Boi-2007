@@ -3,6 +3,10 @@
     transition: background-color 0.4s ease, color 0.4s ease, border-color 0.4s ease, box-shadow 0.4s ease;
 }
 
+*:focus {
+    outline: none;
+}
+
 :root {
     --bg-primary: #0f0c29;
     --bg-secondary: #1a1f35;
@@ -166,6 +170,75 @@ body {
     box-shadow: 0 4px 15px var(--accent-glow);
 }
 
+/* Mode-specific colors for conversations */
+.conversation-item.mode-default {
+    border-left: 3px solid #4fc3f7;
+}
+
+.conversation-item.mode-gaming {
+    border-left: 3px solid #ff003c;
+}
+
+.conversation-item.mode-coding {
+    border-left: 3px solid #bd93f9;
+}
+
+/* Active conversations with mode colors */
+.conversation-item.mode-default.active {
+    background: linear-gradient(135deg, #4fc3f7 0%, #00b4d8 100%);
+    border-left: 3px solid #00b4d8;
+}
+
+.conversation-item.mode-gaming.active {
+    background: linear-gradient(135deg, #ff003c 0%, #ff6b6b 100%);
+    border-left: 3px solid #ff6b6b;
+}
+
+.conversation-item.mode-coding.active {
+    background: linear-gradient(135deg, #9b59b6 0%, #bd93f9 100%);
+    border-left: 3px solid #bd93f9;
+}
+
+/* Mode color accent for hover */
+.conversation-item.mode-default:hover {
+    border-color: #4fc3f7;
+    background: rgba(79, 195, 247, 0.1);
+}
+
+.conversation-item.mode-gaming:hover {
+    border-color: #ff003c;
+    background: rgba(255, 0, 60, 0.1);
+}
+
+.conversation-item.mode-coding:hover {
+    border-color: #bd93f9;
+    background: rgba(189, 147, 249, 0.1);
+}
+
+/* Mode icon in conversation items */
+.conversation-mode-icon {
+    font-size: 0.9em;
+    margin-right: 6px;
+    flex-shrink: 0;
+}
+
+.mode-default .conversation-mode-icon {
+    color: #4fc3f7;
+}
+
+.mode-gaming .conversation-mode-icon {
+    color: #ff003c;
+}
+
+.mode-coding .conversation-mode-icon {
+    color: #bd93f9;
+}
+
+.conversation-item.active .conversation-mode-icon {
+    color: white;
+    opacity: 0.9;
+}
+
 .conversation-title {
     flex: 1;
     overflow: hidden;
@@ -184,8 +257,13 @@ body {
     transition: opacity 0.2s ease;
 }
 
-.conversation-item:hover .delete-conversation {
+.conversation-item:hover .delete-conversation,
+.conversation-item.active .delete-conversation {
     opacity: 1;
+}
+
+.conversation-item.active .delete-conversation {
+    color: #fff;
 }
 
 /* Scrollbar styling */
@@ -375,9 +453,25 @@ body {
     padding: 20px;
     background: rgba(2, 6, 23, 0.4);
     border-radius: 12px;
-    border: 1px solid var(--border-color);
+    border: 2px solid var(--border-color);
     margin-bottom: 15px;
     scroll-behavior: smooth;
+    transition: border-color 0.4s ease, box-shadow 0.4s ease;
+}
+
+[data-mode="default"] .chat-messages {
+    border-color: rgba(79, 195, 247, 0.3);
+    box-shadow: inset 0 0 30px rgba(79, 195, 247, 0.05);
+}
+
+[data-mode="gaming"] .chat-messages {
+    border-color: rgba(255, 0, 60, 0.3);
+    box-shadow: inset 0 0 30px rgba(255, 0, 60, 0.05);
+}
+
+[data-mode="coding"] .chat-messages {
+    border-color: rgba(189, 147, 249, 0.3);
+    box-shadow: inset 0 0 30px rgba(189, 147, 249, 0.05);
 }
 
 /* Message Styles */
@@ -500,6 +594,25 @@ body {
 .message pre code {
     background: none;
     padding: 0;
+}
+
+/* Mode-specific chat bubble accents */
+[data-mode="default"] .message-wrapper .avatar {
+    border-color: #4fc3f7;
+}
+
+[data-mode="gaming"] .message-wrapper .avatar {
+    border-color: #ff003c;
+}
+
+[data-mode="coding"] .message-wrapper .avatar {
+    border-color: #bd93f9;
+}
+
+/* Mode badge in chat area */
+.chat-messages::before {
+    content: attr(data-mode);
+    display: none;
 }
 
 /* Input Area */
