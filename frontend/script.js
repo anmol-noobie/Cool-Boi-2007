@@ -1,5 +1,5 @@
 const CONFIG = {
-    BACKEND_URL: "https://coolboi2007.onrender.com" // Change this to your backend URL
+    BACKEND_URL: "https://cool-boi-2007-production.up.railway.app" // Change this to your backend URL
 };
 
 const API_URL = `${CONFIG.BACKEND_URL}/chat`;
