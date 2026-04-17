@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: coolboi-backend
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: GROQ_API_KEY
+        sync: false
+      - key: MODEL_NAME
+        value: llama-3.3-70b-versatile
+      - key: ALLOWED_ORIGINS
+        value: "https://coolboi2007.vercel.app,http://localhost:5500"
+      - key: PYTHON_VERSION
+        value: 3.12
