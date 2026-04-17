@@ -1,6 +1,7 @@
 from fastapi import FastAPI, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import List, Optional
 import asyncio
@@ -15,6 +16,11 @@ except ImportError:
 import sys
 
 app = FastAPI()
+
+# Serve frontend static files
+frontend_path = os.path.join(os.path.dirname(__file__), "..", "frontend")
+if os.path.exists(frontend_path):
+    app.mount("/static", StaticFiles(directory=frontend_path), name="static")
 
 ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "http://127.0.0.1:5500,http://localhost:5500").split(",")
 
@@ -44,6 +50,12 @@ class LoadConversationRequest(BaseModel):
 
 class CommandSuggestionsRequest(BaseModel):
     partial: str
+
+
+@app.get("/")
+def serve_index():
+    index_path = os.path.join(os.path.dirname(__file__), "..", "frontend", "index.html")
+    return FileResponse(index_path)
 
 
 @app.get("/health")
