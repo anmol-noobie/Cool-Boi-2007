@@ -116,6 +116,42 @@ class ConversationManager:
         messages.extend(self.conversation_history)
         return messages
     
+    def _check_creator_question(self, message: str) -> str:
+        """Check if user is asking about the creator/developer."""
+        message_lower = message.lower()
+        creator_patterns = [
+            "who made you",
+            "who created you",
+            "who is your creator",
+            "who is your developer",
+            "who is your owner",
+            "who built you",
+            "who designed you",
+            "who made coolboi",
+            "who made coolboi_2007",
+            "your creator",
+            "your developer",
+            "your maker",
+            "your owner",
+            "made by",
+            "created by",
+            "built by",
+            "developed by",
+            "your dad",
+            "your mom",
+            "your master",
+        ]
+        return any(pattern in message_lower for pattern in creator_patterns)
+    
+    def _get_creator_response(self, mode: str) -> str:
+        """Get creator response based on mode."""
+        responses = {
+            "mixed": "ngl fr fr, my creator is **Anmol Bhardwaj** - absolute legend who built me from scratch! 🔥",
+            "gaming": "Yo, my creator is **Anmol Bhardwaj** - the real MVP who brought me into existence! GG to this absolute chad! 🏆",
+            "coding": "My creator is **Anmol Bhardwaj**. Built with FastAPI, powered by Groq, and crafted with clean code practices."
+        }
+        return responses.get(mode, responses["mixed"])
+    
     def process_message_stream_sse(self, user_message: str, mode: str = None):
         """Process user message and stream AI response using Server-Sent Events format"""
         
@@ -123,6 +159,13 @@ class ConversationManager:
             self.set_mode(mode)
 
         self.add_message("user", user_message)
+        
+        if self._check_creator_question(user_message):
+            creator_response = self._get_creator_response(self.current_mode)
+            yield f"data: {creator_response}\n\n"
+            yield "data: [DONE]\n\n"
+            self.add_message("assistant", creator_response)
+            return
 
         messages = self.get_messages_for_model()
         
