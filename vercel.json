@@ -2,22 +2,22 @@
   "version": 2,
   "builds": [
     {
-      "src": "frontend/index.html",
-      "use": "@vercel/static"
-    },
-    {
-      "src": "frontend/script.js",
-      "use": "@vercel/static"
-    },
-    {
-      "src": "frontend/style.css",
+      "src": "frontend/**",
       "use": "@vercel/static"
     }
   ],
   "routes": [
     {
+      "src": "/style.css",
+      "dest": "/frontend/style.css"
+    },
+    {
+      "src": "/script.js",
+      "dest": "/frontend/script.js"
+    },
+    {
       "src": "/(.*)",
-      "dest": "frontend/index.html"
+      "dest": "/frontend/index.html"
     }
   ]
 }
