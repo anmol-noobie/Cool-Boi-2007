@@ -610,97 +610,6 @@ body {
     margin: 4px 0;
 }
 
-/* Code blocks in messages */
-.code-block {
-    background: #1e1e1e;
-    border-radius: 8px;
-    margin: 12px 0;
-    overflow: hidden;
-    border: 1px solid #333;
-}
-
-.code-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 8px 12px;
-    background: #2d2d2d;
-    border-bottom: 1px solid #333;
-}
-
-.code-lang {
-    font-size: 0.75em;
-    color: #888;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    font-weight: 600;
-}
-
-.copy-btn {
-    background: #4a4a4a;
-    border: none;
-    color: #ccc;
-    padding: 4px 10px;
-    border-radius: 4px;
-    font-size: 0.75em;
-    cursor: pointer;
-    transition: all 0.2s;
-}
-
-.copy-btn:hover {
-    background: var(--accent-primary);
-    color: white;
-}
-
-.code-content {
-    margin: 0;
-    padding: 12px 16px;
-    overflow-x: auto;
-    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
-    font-size: 0.85em;
-    line-height: 1.5;
-    color: #d4d4d4;
-    white-space: pre-wrap;
-    word-wrap: break-word;
-}
-
-.message code {
-    font-family: 'Consolas', 'Monaco', monospace;
-    font-size: 0.9em;
-    background: rgba(0, 0, 0, 0.3);
-    padding: 2px 6px;
-    border-radius: 4px;
-    color: var(--accent-primary);
-}
-
-.message pre code {
-    background: none;
-    padding: 0;
-}
-
-.message pre {
-    background: transparent;
-    border-radius: 0;
-    padding: 0;
-    margin: 0;
-    border-left: none;
-}
-
-.inline-code {
-    font-family: 'Consolas', 'Monaco', monospace;
-    background: rgba(0, 0, 0, 0.4);
-    padding: 2px 6px;
-    border-radius: 4px;
-    font-size: 0.9em;
-    color: var(--accent-primary);
-}
-
-/* Bot message specific padding */
-.message.bot {
-    padding: 16px 20px;
-    line-height: 1.7;
-}
-
 /* Mode-specific chat bubble accents */
 [data-mode="default"] .message-wrapper .avatar {
     border-color: #4fc3f7;
@@ -1233,8 +1142,183 @@ body {
     color: var(--accent-primary);
 }
 
+/* Code Block Styles */
+.code-block {
+    background: #1e1e1e;
+    border-radius: 8px;
+    margin: 16px 0;
+    overflow: hidden;
+    border: 1px solid #333;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.code-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 14px;
+    background: #2d2d2d;
+    border-bottom: 1px solid #3a3a3a;
+    min-height: 36px;
+}
+
+.code-lang {
+    font-size: 0.75em;
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-weight: 600;
+    flex: 1;
+}
+
+.code-title {
+    font-weight: 600;
+    font-size: 1em;
+    color: var(--text-primary);
+    margin-bottom: 8px;
+}
+
+.copy-btn {
+    background: #444;
+    border: 1px solid #555;
+    color: #ccc;
+    padding: 6px 12px;
+    border-radius: 4px;
+    font-size: 0.75em;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+    flex-shrink: 0;
+    margin-left: 8px;
+}
+
+.copy-btn:hover {
+    background: var(--accent-primary);
+    color: white;
+    border-color: var(--accent-primary);
+    transform: translateY(-1px);
+}
+
+.copy-btn.copied {
+    background: #4ade80;
+    color: #1a1a1a;
+    border-color: #4ade80;
+}
+
+.copy-btn.error {
+    background: #ef4444;
+    color: white;
+    border-color: #ef4444;
+}
+
+.code-content {
+    margin: 0;
+    padding: 14px 16px;
+    overflow-x: auto;
+    font-family: 'Consolas', 'Monaco', 'Courier New', 'Menlo', monospace;
+    font-size: 0.85em;
+    line-height: 1.6;
+    color: #d4d4d4;
+    white-space: pre;
+    tab-size: 4;
+    word-wrap: normal;
+}
+
+.code-content code {
+    background: none;
+    padding: 0;
+    color: inherit;
+    font-family: inherit;
+    font-size: inherit;
+}
+
+.code-tips {
+    padding: 12px 16px;
+    background: rgba(79, 195, 247, 0.05);
+    border-top: 1px solid #333;
+    border-radius: 0 0 8px 8px;
+}
+
+.code-tips h4 {
+    margin: 0 0 8px 0;
+    font-size: 0.85em;
+    color: var(--accent-primary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.code-tips ul {
+    margin: 0;
+    padding-left: 20px;
+}
+
+.code-tips li {
+    margin: 4px 0;
+    font-size: 0.85em;
+    color: var(--text-secondary);
+}
+
+/* Ensure code blocks are separated from paragraphs */
+.message > p + .code-block {
+    margin-top: 12px;
+}
+
+.message > .code-block + p {
+    margin-top: 12px;
+}
+
+.message > .code-block + .code-block {
+    margin-top: 4px;
+}
+
+/* Generating indicator */
+.generating-indicator {
+    color: var(--text-secondary);
+    font-style: italic;
+    animation: pulse-opacity 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse-opacity {
+    0%, 100% { opacity: 0.5; }
+    50% { opacity: 1; }
+}
+
+/* Inline code styling */
+.inline-code {
+    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+    background: rgba(0, 0, 0, 0.4);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 0.9em;
+    color: var(--accent-primary);
+}
+
+.message .inline-code {
+    color: var(--accent-primary);
+}
+
+/* Code block scrollbar styling */
+.code-content::-webkit-scrollbar {
+    height: 8px;
+}
+
+.code-content::-webkit-scrollbar-track {
+    background: #1e1e1e;
+}
+
+.code-content::-webkit-scrollbar-thumb {
+    background: #444;
+    border-radius: 4px;
+}
+
+.code-content::-webkit-scrollbar-thumb:hover {
+    background: #555;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
+
     .app-container {
         flex-direction: column;
     }
@@ -1318,3 +1402,6 @@ body {
         max-width: 100%;
     }
 }
+
+ol, ul { padding-left: 1.5rem; margin: 0.5rem 0; }
+li { margin-bottom: 0.5rem; line-height: 1.6; }

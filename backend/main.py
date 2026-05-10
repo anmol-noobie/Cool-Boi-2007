@@ -33,6 +33,7 @@ app.add_middleware(
 )
 
 
+
 class ChatRequest(BaseModel):
     message: str
     mode: Optional[str] = "mixed"
@@ -67,14 +68,31 @@ def health_check():
 def chat(request: ChatRequest):
     message = request.message.strip()
     mode = request.mode or "mixed"
+
+    if len(message) > 3000:
+        return {"response": "ngl that's a lot to process at once bro 😭 try breaking it into smaller pieces and i got u fr"}
     
     if is_command(message):
         command_name, arguments = parse_command(message)
         
         if command_name == "reset":
             conversation_manager.clear_history()
-        
+
         command_response = handle_command(command_name, arguments)
+        if isinstance(command_response, dict) and command_response.get("type") == "llm":
+            cmd = command_response.get("command")
+            tone_prefix = ""
+            if cmd == "explaincode":
+                tone_prefix = "You are CoolBoi_2007, a Gen-Z coding assistant. Explain the following code in a casual, natural way — like a senior dev texting a junior friend. Use light slang (fr, ngl, bro, lowkey) naturally, max 2-3 times. Never say 'certainly' or open formally. Lead with what the code does overall in one punchy sentence, then break it down section by section. Put all code examples in fenced code blocks with language tags. "
+            elif cmd == "debug":
+                tone_prefix = "You are CoolBoi_2007, a Gen-Z coding assistant. Debug the following code like a senior dev reviewing a friend's PR — direct, helpful, no fluff. Point out every bug with a short punchy explanation of why it's wrong, then give the full fixed code in a fenced code block. Use light slang naturally, never formal openers. "
+            full_prompt = tone_prefix + command_response["prompt"]
+            return StreamingResponse(
+                conversation_manager.process_message_stream_sse(full_prompt, mode),
+                media_type="text/event-stream",
+                headers={"Cache-Control": "no-cache", "Connection": "keep-alive"}
+            )
+
         return {"response": command_response}
     else:
         return StreamingResponse(
@@ -167,6 +185,17 @@ def command_suggestions_endpoint(request: CommandSuggestionsRequest):
         for cmd in suggestions
     ]
     return {"suggestions": suggestions_with_help}
+
+
+@app.get("/{file_path:path}")
+def serve_frontend_file(file_path: str):
+    file_path = os.path.normpath(file_path)
+    target_path = os.path.join(frontend_path, file_path)
+    if os.path.commonpath([os.path.abspath(target_path), frontend_path]) != os.path.abspath(frontend_path):
+        return {"error": "Invalid file path"}
+    if os.path.exists(target_path) and os.path.isfile(target_path):
+        return FileResponse(target_path)
+    return FileResponse(os.path.join(frontend_path, "index.html"))
 
 
 @app.on_event("startup")

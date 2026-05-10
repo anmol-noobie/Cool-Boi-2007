@@ -1,8 +1,9 @@
 from groq import Groq
 import json
 import os
+import re
 import tempfile
-from typing import List, Dict
+from typing import List, Dict, Optional
 from datetime import datetime
 from dotenv import load_dotenv
 
@@ -30,7 +31,6 @@ def load_mode_prompt(mode: str) -> str:
     """Load system prompt for the given mode."""
     prompt_key = MODE_PROMPTS.get(mode, "mixed")
     prompt_file = os.path.join(PROMPTS_DIR, f"mode_{prompt_key}.txt")
-    
     try:
         with open(prompt_file, 'r', encoding='utf-8') as f:
             return f.read().strip()
@@ -39,12 +39,54 @@ def load_mode_prompt(mode: str) -> str:
         return get_fallback_prompt(mode)
 
 
+def clean_json_response(text: str) -> str:
+    """Strip markdown fences and surrounding noise from LLM JSON responses."""
+    stripped = text.strip()
+    if stripped.startswith("```"):
+        stripped = re.sub(r'^```(?:json)?\s*\n?', '', stripped)
+        stripped = re.sub(r'\n?```\s*$', '', stripped)
+        stripped = stripped.strip()
+    return stripped
+
+
+def extract_json_from_response(text: str) -> Optional[dict]:
+    """Attempt to parse a structured JSON code response from LLM output.
+    Returns parsed dict if valid JSON with 'type' key, else None.
+    """
+    cleaned = clean_json_response(text)
+    try:
+        data = json.loads(cleaned)
+        if isinstance(data, dict) and "type" in data:
+            return data
+        return None
+    except (json.JSONDecodeError, ValueError):
+        return None
+
+
 def get_fallback_prompt(mode: str) -> str:
     """Fallback prompts if files are not found."""
+    code_response_instruction = """
+
+## CODE BLOCK FORMAT
+When sharing code, use markdown fenced code blocks with triple backticks and the language identifier (e.g., ```python). Keep explanations before the code block. For non-code questions, respond normally.
+"""
+    base_rules = f"""
+
+OUTPUT FORMAT RULES (FOLLOW EXACTLY):
+1. Keep replies conversational, useful, and complete.
+2. Avoid filler sentences, repeated ideas, and extra introductions.
+3. Use clear paragraph breaks and short lists when needed.
+4. Use **bold** for important terms.
+5. Use numbered lists for steps.
+6. Do not add extra sections unless directly relevant.
+7. Avoid phrases like "let me know", "I'm here to help" unless natural.
+8. If asked who made you: "CoolBoi_2007 was created by Anmol Bhardwaj." Exactly.
+{code_response_instruction}
+"""
     prompts = {
-        "mixed": """You are CoolBoi_2007, a Gen-Z tech-savvy assistant. Be casual, use light slang like "ngl", "fr", "no cap". Be direct and helpful. Keep responses punchy with line breaks. Use code blocks for code.""",
-        "gaming": """You are CoolBoi_2007 in GAMING MODE. High energy, competitive. Use gaming slang naturally: GG, meta, buff, nerf, clutch, tryhard. Treat tech problems like game challenges. Keep it hype and fun.""",
-        "coding": """You are CoolBoi_2007 in CODING MODE. Senior dev energy. Precise, methodical. Lead with solution first, explanation after. Use proper code blocks. Mention best practices and edge cases."""
+        "mixed": f"You are CoolBoi_2007, a Gen-Z tech-savvy assistant. Be casual, balanced, and friendly. Keep answers conversational, useful, and complete.{base_rules}",
+        "gaming": f"You are CoolBoi_2007 in GAMING MODE. High energy, competitive, and gamer-focused. Use gaming analogies and clear, confident strategy advice.{base_rules}",
+        "coding": f"You are CoolBoi_2007 in CODING MODE. Technical, clean, and code-first. Lead with the solution, then explain why it works.{base_rules}"
     }
     return prompts.get(mode, prompts["mixed"])
 
@@ -80,7 +122,7 @@ class ConversationManager:
                 self.save_history()
         else:
             self.conversation_history = []
-    
+
     def save_history(self):
         """Save conversation history to file"""
         temp_path = None
@@ -101,7 +143,7 @@ class ConversationManager:
                     os.remove(temp_path)
                 except OSError:
                     pass
-    
+
     def add_message(self, role: str, content: str):
         """Add a message to conversation history"""
         self.conversation_history.append({
@@ -109,57 +151,61 @@ class ConversationManager:
             "content": content
         })
         self.save_history()
-    
+
     def get_messages_for_model(self) -> List[Dict[str, str]]:
         """Get full conversation history with system prompt for model"""
         messages = [{"role": "system", "content": self.system_prompt}]
         messages.extend(self.conversation_history)
         return messages
-    
-    def _check_creator_question(self, message: str) -> str:
+
+    def _check_creator_question(self, message: str) -> bool:
         """Check if user is asking about the creator/developer."""
-        message_lower = message.lower()
-        creator_patterns = [
-            "who made you",
-            "who created you",
-            "who is your creator",
-            "who is your developer",
-            "who is your owner",
-            "who built you",
-            "who designed you",
-            "who made coolboi",
-            "who made coolboi_2007",
-            "your creator",
-            "your developer",
-            "your maker",
-            "your owner",
-            "made by",
-            "created by",
-            "built by",
-            "developed by",
-            "your dad",
-            "your mom",
-            "your master",
+        normalized = re.sub(r"[^a-z0-9\s]", " ", message.lower())
+        creator_keywords = r"\b(creator|owner|founder|developer|author|maker|builder)\b"
+        maker_verbs = r"\b(made|built|created|developed)\b"
+        direct_phrases = [
+            r"who.*\bmade\b",
+            r"who.*\bbuilt\b",
+            r"who.*\bcreated\b",
+            r"who.*\bdeveloped\b",
+            r"who.*\byour\b.*(creator|owner|founder|developer|author|maker|builder)",
+            r"who.*\b(creator|owner|founder|developer|author|maker|builder)\b",
+            r"tell me about your (creator|owner|founder|developer|author|maker|builder)",
+            r"about your (creator|owner|founder|developer|author|maker|builder)",
+            r"who.*\bis\b.*\byou\b.*(made|built|created|developed)",
+            r"who.*behind.*(you|this|coolboi|coolboi_2007|coolboi2007)",
+            r"who.*is.*behind.*(you|this|coolboi|coolboi_2007|coolboi2007)",
+            r"(coolboi|coolboi_2007|coolboi2007).*(made|built|created|developed)",
+            r"(made|built|created|developed).*(coolboi|coolboi_2007|coolboi2007)"
         ]
-        return any(pattern in message_lower for pattern in creator_patterns)
-    
+
+        for phrase in direct_phrases:
+            if re.search(phrase, normalized):
+                return True
+
+        if re.search(creator_keywords, normalized) and re.search(maker_verbs, normalized):
+            return True
+
+        return False
+
     def _get_creator_response(self, mode: str) -> str:
-        """Get creator response based on mode."""
-        responses = {
-            "mixed": "ngl fr fr, my creator is **Anmol Bhardwaj** - absolute legend who built me from scratch! 🔥",
-            "gaming": "Yo, my creator is **Anmol Bhardwaj** - the real MVP who brought me into existence! GG to this absolute chad! 🏆",
-            "coding": "My creator is **Anmol Bhardwaj**. Built with FastAPI, powered by Groq, and crafted with clean code practices."
+        """Get creator response based on mode with exact required phrase."""
+        base = "CoolBoi_2007 was created by Anmol Bhardwaj."
+        variants = {
+            "mixed": f"{base} He is the dev behind my whole personality, the one who built me as a gaming and coding assistant.",
+            "gaming": f"{base} That's the OG fact - Anmol Bhardwaj is the creator who crafted me to flex gaming knowledge and system strats.",
+            "coding": f"{base} Anmol Bhardwaj built me with FastAPI, Groq, and clean coding principles so I can deliver precise technical help."
         }
-        return responses.get(mode, responses["mixed"])
-    
+        return variants.get(mode, variants["mixed"])
+
     def process_message_stream_sse(self, user_message: str, mode: str = None):
         """Process user message and stream AI response using Server-Sent Events format"""
-        
+
         if mode and mode != self.current_mode:
             self.set_mode(mode)
 
         self.add_message("user", user_message)
-        
+
         if self._check_creator_question(user_message):
             creator_response = self._get_creator_response(self.current_mode)
             yield f"data: {creator_response}\n\n"
@@ -168,7 +214,7 @@ class ConversationManager:
             return
 
         messages = self.get_messages_for_model()
-        
+
         try:
             stream = self.client.chat.completions.create(
                 model=MODEL_NAME,
@@ -181,28 +227,30 @@ class ConversationManager:
             yield "data: [DONE]\n\n"
             self.add_message("assistant", error_msg)
             return
-        
+
         bot_response = ""
-        
+
         for chunk in stream:
-            if chunk.choices and chunk.choices[0].delta.content:
+            if chunk.choices and chunk.choices[0].delta.content is not None:
                 content = chunk.choices[0].delta.content
-                if content:
+                if content is not None:
                     bot_response += content
-                    yield f"data: {content}\n\n"
-        
+                    print(f"SENDING TOKEN: {repr(content)}")
+                    yield f"data: {json.dumps({'content': content})}\n\n"
+
+        print(f"[DEBUG] Coding mode response complete. Length: {len(bot_response)}, Starts with: {bot_response[:100]}")
         yield "data: [DONE]\n\n"
-        
+
         self.add_message("assistant", bot_response)
-    
+
     def get_history(self) -> List[Dict[str, str]]:
         """Get conversation history (without system prompt)"""
         return self.conversation_history.copy()
-    
+
     def load_conversation(self, messages: List[Dict[str, str]]):
         """Load a conversation history from the frontend"""
         self.conversation_history = messages.copy()
-    
+
     def clear_history(self):
         """Clear conversation history"""
         self.conversation_history = []
@@ -210,12 +258,12 @@ class ConversationManager:
 
     def process_file(self, file_content: str, filename: str, mode: str = None) -> str:
         """Process an uploaded file by sending its contents to the model."""
-        
+
         if mode and mode != self.current_mode:
             self.set_mode(mode)
 
         file_type, analysis_prompt = self._detect_file_type_and_prompt(filename, file_content)
-        
+
         descriptor = f"User uploaded {file_type} file '{filename}':\n\n{analysis_prompt}\n\n---FILE CONTENT---\n{file_content}"
         self.add_message("user", descriptor)
 
@@ -235,21 +283,21 @@ class ConversationManager:
     def _detect_file_type_and_prompt(self, filename: str, content: str) -> tuple:
         """Detect file type and return appropriate analysis prompt."""
         filename_lower = filename.lower()
-        
+
         if any(filename_lower.endswith(ext) for ext in ['.log', '.logs', '.error', '.trace', '.stacktrace']):
-            return "log", "Please analyze this log file and:\n1. Identify any errors or warnings\n2. Explain what went wrong\n3. Suggest potential causes and solutions"
-        
+            return "log", "Please analyze this log file and:\n1. Identify any errors, warnings, or failure patterns.\n2. Explain the most likely root causes in plain language.\n3. Suggest practical fixes and next steps to resolve the issue.\n4. Use numbered lists and clear sections."
+
         elif any(filename_lower.endswith(ext) for ext in ['.py', '.js', '.ts', '.java', '.cpp', '.c', '.go', '.rs', '.rb', '.php', '.sql']):
-            return "code", "Please analyze this code file and:\n1. Review the code structure and logic\n2. Identify any bugs or issues\n3. Suggest improvements for performance or best practices"
-        
+            return "code", "Please analyze this code file and:\n1. Review the overall structure and logic.\n2. Identify any bugs, syntax issues, or edge cases.\n3. Suggest improvements for performance, readability, and best practices.\n4. Provide sample corrections or code snippets if relevant."
+
         elif any(filename_lower.endswith(ext) for ext in ['.json', '.yaml', '.yml', '.xml', '.ini', '.conf', '.config', '.env']):
-            return "config", "Please analyze this configuration file and:\n1. Explain what each setting does\n2. Identify any misconfigurations\n3. Suggest optimal settings"
-        
+            return "config", "Please analyze this configuration file and:\n1. Explain the purpose of the main settings.\n2. Identify any misconfigurations or risky values.\n3. Recommend safer or more effective settings.\n4. Summarize what the current configuration will do."
+
         elif any(filename_lower.endswith(ext) for ext in ['.csv']):
-            return "data", "Please analyze this CSV/data file and:\n1. Describe the data structure\n2. Identify any anomalies or issues\n3. Suggest how this data could be useful"
-        
+            return "data", "Please analyze this CSV/data file and:\n1. Describe the data structure and key columns.\n2. Identify any anomalies or inconsistencies.\n3. Suggest how this data could be used or improved.\n4. Present your findings clearly with numbered points."
+
         else:
-            return "text", "Please analyze this file and provide:\n1. A summary of the contents\n2. Key insights or important information\n3. Suggestions for improvement"
+            return "text", "Please analyze this file and provide:\n1. A summary of the contents.\n2. Key insights or important information.\n3. Suggestions for improvement.\n4. A clear, structured answer with headings or numbered lists."
 
 
 conversation_manager = ConversationManager()
